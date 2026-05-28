@@ -7,6 +7,10 @@ A custom [Home Assistant](https://www.home-assistant.io/) Lovelace card that tur
 - Selectable **size and orientation** (250 gal horizontal, 5/20 lb vertical, 500/1000 gal, and more) plus a Custom option.
 - Optional **gallons remaining** readout and a **low-level warning** color.
 - Full **visual (GUI) editor** — no YAML required.
+<img width="498" height="266" alt="image" src="https://github.com/user-attachments/assets/faae4a6f-c062-47ad-aa8e-07734e2d9ff7" />
+
+<img width="1024" height="985" alt="image" src="https://github.com/user-attachments/assets/1e903054-be30-4d1f-aebf-becb5dd3dd0a" />
+
 
 ## Installation
 
