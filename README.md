@@ -8,14 +8,21 @@ A custom [Home Assistant](https://www.home-assistant.io/) Lovelace card that tur
 - Optional **gallons remaining** readout and a **low-level warning** color.
 - Full **visual (GUI) editor** — no YAML required.
 
-> Replace `YOUR_GITHUB_USERNAME` below with your GitHub username before publishing.
+<img width="490" height="264" alt="image" src="https://github.com/user-attachments/assets/8b0bbceb-9c89-45a9-a858-2e2ee68e3e3f" />
+
+<img width="1024" height="1076" alt="image" src="https://github.com/user-attachments/assets/3d650961-d49c-42bc-a6df-7a8cf207ef5e" />
+
 
 ## Installation
 
 ### Via HACS (recommended)
 
+[![Open your Home Assistant instance and add this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=imonlinux&repository=propane-tank-card&category=dashboard)
+
+### Or
+
 1. In HACS, open the three-dot menu → **Custom repositories**.
-2. Add `https://github.com/YOUR_GITHUB_USERNAME/propane-tank-card` with category **Dashboard**.
+2. Add `https://github.com/imonlinux/propane-tank-card` with category **Dashboard**.
 3. Find **Propane Tank Card** in HACS and click **Download**.
 4. HACS adds the dashboard resource automatically. (If you run YAML-mode dashboards, add the resource manually — see below.)
 5. Hard-refresh your browser (Ctrl/Cmd+Shift+R).
@@ -120,8 +127,6 @@ When you use **`value_type: inches`** the card has the actual liquid height, so 
 If your sensor already reports liquid height as a percentage (not volume), set `level_is_volume: false`.
 
 ## A note on linear compensation sensors
-
-If you currently feed inches → gallons through Home Assistant's `compensation` integration with only two data points (e.g. `[0,0]` and `[30,250]`), the result is a straight line — it does **not** account for the spherical ends, despite what some references suggest. A linear fit overstates gallons in the lower half (a 30″/250 gal tank at 6″ reads 50 gal linearly, but truly holds ~33 gal) and understates them in the upper half.
 
 If you prefer to keep standalone gallons/percentage entities (for the Energy dashboard, automations, etc.), use a multi-point table with a low-degree fit. The values below come from a cylinder + hemispherical-heads model of a 30″ × 92″, 250-gallon tank:
 
