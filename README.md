@@ -171,6 +171,10 @@ sensor:
 
 For a tank with different dimensions, regenerate the points using the same model (R = diameter/2; cylinder length L derived from total capacity; volume(h) = L·segmentArea(h) + sphericalCapVolume(h)). Or skip the compensation sensors entirely and feed the raw inches sensor to this card with `value_type: inches`.
 
+## Report Issues
+
+Use this link to report issues with this card: [Issues](https://github.com/imonlinux/propane-tank-card/issues/)
+
 ## License
 
 MIT
