@@ -7,17 +7,15 @@ A custom [Home Assistant](https://www.home-assistant.io/) Lovelace card that tur
 - Selectable **size and orientation** (250 gal horizontal, 5/20 lb vertical, 500/1000 gal, and more) plus a Custom option.
 - Optional **gallons remaining** readout and a **low-level warning** color.
 - Full **visual (GUI) editor** — no YAML required.
-<img width="498" height="266" alt="image" src="https://github.com/user-attachments/assets/faae4a6f-c062-47ad-aa8e-07734e2d9ff7" />
 
-<img width="1024" height="985" alt="image" src="https://github.com/user-attachments/assets/1e903054-be30-4d1f-aebf-becb5dd3dd0a" />
-
+> Replace `YOUR_GITHUB_USERNAME` below with your GitHub username before publishing.
 
 ## Installation
 
 ### Via HACS (recommended)
 
 1. In HACS, open the three-dot menu → **Custom repositories**.
-2. Add `https://github.com/imonlinux/propane-tank-card` with category **Dashboard**.
+2. Add `https://github.com/YOUR_GITHUB_USERNAME/propane-tank-card` with category **Dashboard**.
 3. Find **Propane Tank Card** in HACS and click **Download**.
 4. HACS adds the dashboard resource automatically. (If you run YAML-mode dashboards, add the resource manually — see below.)
 5. Hard-refresh your browser (Ctrl/Cmd+Shift+R).
@@ -66,6 +64,18 @@ max_capacity: 500
 show_gallons: true
 ```
 
+A raw depth sensor that reports **inches of liquid** above the probe (Mopeka, magnetostrictive, ultrasonic, etc.) — **no compensation sensors needed**. The card derives gallons and percentage from the tank geometry using a cylinder + hemispherical-heads model:
+
+```yaml
+type: custom:propane-tank-card
+entity: sensor.propane_tank_tank_level
+tank_preset: 250gal_horizontal
+value_type: inches
+full_scale_inches: 30   # depth reading at 100% full = inside diameter
+max_capacity: 250
+show_gallons: true
+```
+
 ## Options
 
 | Option | Type | Default | Description |
@@ -75,8 +85,9 @@ show_gallons: true
 | `tank_preset` | string | `250gal_horizontal` | Sets orientation, aspect ratio, and capacity. See list below. |
 | `orientation` | string | from preset | `horizontal` or `vertical` — overrides the preset. |
 | `aspect_ratio` | number | from preset | Length/diameter (horizontal) or height/diameter (vertical). Overrides the preset. |
-| `value_type` | string | `percentage` | `percentage` if the sensor reads 0–100, or `gallons` if it reads a volume. |
-| `max_capacity` | number | from preset | Tank capacity in gallons, used for the gallons readout (and to convert when `value_type: gallons`). |
+| `value_type` | string | `percentage` | `percentage` (0–100), `gallons` (volume), or `inches` (raw liquid depth above the sensor). |
+| `full_scale_inches` | number | from preset | Used when `value_type: inches`. Depth reading at 100% full. For a horizontal tank this is the inside diameter; for a vertical tank, the inside height. |
+| `max_capacity` | number | from preset | Tank capacity in gallons, used for the gallons readout (and to convert when `value_type` is `gallons` or `inches`). |
 | `level_is_volume` | bool | `true` | Treat the reading as a **volume** percentage and place the liquid line accurately. Set `false` if your sensor already reports liquid **height**. |
 | `show_percentage` | bool | `true` | Show the big percentage overlay. |
 | `show_gallons` | bool | `false` | Show "≈ N gal" beneath the percentage. |
@@ -104,7 +115,56 @@ Standard propane gauges report **percentage of capacity (volume)**. For a horizo
 | 75% | ~70.2% |
 | 90% | ~84.4% |
 
-The conversion models the tank as a horizontal cylinder (the standard approximation; the hemispherical end caps are not separately modeled). Vertical tanks are treated linearly. If your sensor already reports liquid height rather than volume, set `level_is_volume: false`.
+When you use **`value_type: inches`** the card has the actual liquid height, so it draws the liquid line exactly and computes gallons/percentage from the geometry. For horizontal tanks it uses a cylinder + two hemispherical heads model, deriving the cylindrical length from the inside diameter and total capacity — which self-calibrates to your specific tank. Vertical tanks are treated linearly.
+
+If your sensor already reports liquid height as a percentage (not volume), set `level_is_volume: false`.
+
+## A note on linear compensation sensors
+
+If you currently feed inches → gallons through Home Assistant's `compensation` integration with only two data points (e.g. `[0,0]` and `[30,250]`), the result is a straight line — it does **not** account for the spherical ends, despite what some references suggest. A linear fit overstates gallons in the lower half (a 30″/250 gal tank at 6″ reads 50 gal linearly, but truly holds ~33 gal) and understates them in the upper half.
+
+If you prefer to keep standalone gallons/percentage entities (for the Energy dashboard, automations, etc.), use a multi-point table with a low-degree fit. The values below come from a cylinder + hemispherical-heads model of a 30″ × 92″, 250-gallon tank:
+
+```yaml
+sensor:
+  - platform: compensation
+    propane_tank_gallons:
+      source: sensor.propane_tank_tank_level
+      unit_of_measurement: gal
+      precision: 0
+      degree: 3
+      data_points:
+        - [0, 0.0]
+        - [3, 11.5]
+        - [6, 33.2]
+        - [9, 60.9]
+        - [12, 92.1]
+        - [15, 125.0]
+        - [18, 157.9]
+        - [21, 189.1]
+        - [24, 216.8]
+        - [27, 238.5]
+        - [30, 250.0]
+    propane_tank_percentage:
+      source: sensor.propane_tank_tank_level
+      unit_of_measurement: '%'
+      precision: 0
+      degree: 3
+      data_points:
+        - [0, 0.0]
+        - [3, 4.6]
+        - [6, 13.3]
+        - [9, 24.3]
+        - [12, 36.8]
+        - [15, 50.0]
+        - [18, 63.2]
+        - [21, 75.7]
+        - [24, 86.7]
+        - [27, 95.4]
+        - [30, 100.0]
+```
+
+For a tank with different dimensions, regenerate the points using the same model (R = diameter/2; cylinder length L derived from total capacity; volume(h) = L·segmentArea(h) + sphericalCapVolume(h)). Or skip the compensation sensors entirely and feed the raw inches sensor to this card with `value_type: inches`.
 
 ## License
 

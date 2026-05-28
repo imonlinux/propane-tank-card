@@ -27,18 +27,19 @@ const TANK_PRESETS = {
   "120gal_vertical":   { label: "120 Gallon · Vertical",          orientation: "vertical",   aspect: 2.1,  capacity: 120 },
   "250gal_vertical":   { label: "250 Gallon · Vertical",          orientation: "vertical",   aspect: 3.0,  capacity: 250 },
   "500gal_vertical":   { label: "500 Gallon · Vertical",          orientation: "vertical",   aspect: 3.3,  capacity: 500 },
-  "120gal_horizontal": { label: "120 Gallon · Horizontal",        orientation: "horizontal", aspect: 2.5,  capacity: 120 },
-  "250gal_horizontal": { label: "250 Gallon · Horizontal",        orientation: "horizontal", aspect: 3.0,  capacity: 250 },
-  "330gal_horizontal": { label: "330 Gallon · Horizontal",        orientation: "horizontal", aspect: 3.6,  capacity: 330 },
-  "500gal_horizontal": { label: "500 Gallon · Horizontal",        orientation: "horizontal", aspect: 3.3,  capacity: 500 },
-  "1000gal_horizontal":{ label: "1000 Gallon · Horizontal",       orientation: "horizontal", aspect: 4.6,  capacity: 1000 },
+  "120gal_horizontal": { label: "120 Gallon · Horizontal",        orientation: "horizontal", aspect: 2.5,  capacity: 120,  diameter: 24 },
+  "250gal_horizontal": { label: "250 Gallon · Horizontal",        orientation: "horizontal", aspect: 3.0,  capacity: 250,  diameter: 30 },
+  "330gal_horizontal": { label: "330 Gallon · Horizontal",        orientation: "horizontal", aspect: 3.6,  capacity: 330,  diameter: 30 },
+  "500gal_horizontal": { label: "500 Gallon · Horizontal",        orientation: "horizontal", aspect: 3.3,  capacity: 500,  diameter: 37 },
+  "1000gal_horizontal":{ label: "1000 Gallon · Horizontal",       orientation: "horizontal", aspect: 4.6,  capacity: 1000, diameter: 41 },
   "custom":            { label: "Custom",                          orientation: "horizontal", aspect: 3.0,  capacity: 250 },
 };
 
 const DEFAULTS = {
   tank_preset: "250gal_horizontal",
-  value_type: "percentage", // "percentage" | "gallons"
-  level_is_volume: true,     // map volume% -> fill height (horizontal tanks)
+  value_type: "percentage", // "percentage" | "gallons" | "inches"
+  full_scale_inches: null,   // depth reading at 100% (horizontal: inside diameter)
+  level_is_volume: true,     // map volume% -> fill height (horizontal tanks, percentage mode)
   fill_color: "#2f9bdb",
   tank_color: "#e7e9ec",
   show_percentage: true,
@@ -91,6 +92,33 @@ function volumeFractionToHeightFraction(f) {
     if (area < target) lo = h; else hi = h;
   }
   return ((lo + hi) / 2) / 2;               // normalize back to 0..1
+}
+
+/**
+ * Convert a liquid-depth reading (inches) for a horizontal tank into
+ * { gallons, fraction } using the cylinder + two-hemispherical-heads model.
+ * The cylindrical length L is derived from the inside diameter and the
+ * tank's total capacity, so the formula self-calibrates to your tank.
+ *
+ * Reduces to a pure cylinder when capacity matches a tank with no head
+ * volume, and clamps gracefully when capacity is too small for the
+ * derived geometry.
+ */
+function horizInchesVolume(inches, diameterInches, capacityGal) {
+  const R = diameterInches / 2;
+  if (!(R > 0)) return { gallons: 0, fraction: 0 };
+  const GAL = 231; // cubic inches per US gallon
+  const Vtot = (capacityGal > 0 ? capacityGal : 0) * GAL;
+  const Vsphere = (4 / 3) * Math.PI * R * R * R;
+  let L = Vtot > 0 ? (Vtot - Vsphere) / (Math.PI * R * R) : 0;
+  if (!isFinite(L) || L < 0) L = 0; // very short tank — heads dominate
+  const h = clamp(inches, 0, 2 * R);
+  const u = clamp((R - h) / R, -1, 1);
+  const seg = R * R * Math.acos(u) - (R - h) * Math.sqrt(Math.max(0, 2 * R * h - h * h));
+  const cap = (Math.PI * h * h / 3) * (3 * R - h);
+  const Vh = L * seg + cap;
+  const fraction = Vtot > 0 ? clamp(Vh / Vtot, 0, 1) : clamp(seg / (Math.PI * R * R), 0, 1);
+  return { gallons: Vh / GAL, fraction };
 }
 
 let PTC_UID = 0;
@@ -302,6 +330,9 @@ class PropaneTankCard extends HTMLElement {
       orientation: config.orientation || preset.orientation,
       aspect_ratio: config.aspect_ratio != null ? Number(config.aspect_ratio) : preset.aspect,
       max_capacity: config.max_capacity != null ? Number(config.max_capacity) : preset.capacity,
+      full_scale_inches: config.full_scale_inches != null
+        ? Number(config.full_scale_inches)
+        : (preset.diameter != null ? preset.diameter : null),
     };
     this._lastSig = null;
     if (this._hass) this._render();
@@ -327,27 +358,49 @@ class PropaneTankCard extends HTMLElement {
     const cfg = this._config;
     const st = this._hass.states[cfg.entity];
 
+    const isHorizontal = cfg.orientation === "horizontal";
     let available = !!st && !["unavailable", "unknown", "", "none"].includes(String(st.state).toLowerCase());
-    let pct = 0, gallons = 0, raw = NaN;
+    let pct = 0, gallons = 0, heightFrac = 0, raw = NaN;
+
     if (available) {
       raw = parseFloat(st.state);
       if (!isFinite(raw)) {
         available = false;
+      } else if (cfg.value_type === "inches") {
+        // Depth sensor: derive everything from the geometry. For horizontal
+        // tanks this uses the cylinder + spherical-heads model and is more
+        // accurate than a linear inches->gallons compensation. For vertical
+        // tanks it is treated linearly (height fraction == volume fraction).
+        const fs = Number(cfg.full_scale_inches) || 0;
+        if (fs > 0) {
+          heightFrac = clamp(raw / fs, 0, 1); // exact physical fill height
+          if (isHorizontal) {
+            const v = horizInchesVolume(clamp(raw, 0, fs), fs, cfg.max_capacity);
+            pct = v.fraction * 100;
+            gallons = v.gallons;
+          } else {
+            pct = heightFrac * 100;
+            gallons = cfg.max_capacity * heightFrac;
+          }
+        } else {
+          available = false; // need full_scale_inches to interpret depth
+        }
       } else if (cfg.value_type === "gallons") {
         pct = cfg.max_capacity > 0 ? (raw / cfg.max_capacity) * 100 : 0;
         gallons = raw;
-      } else {
+        const vf = clamp(pct, 0, 100) / 100;
+        heightFrac = (isHorizontal && cfg.level_is_volume)
+          ? volumeFractionToHeightFraction(vf) : vf;
+      } else { // percentage
         pct = raw;
         gallons = (cfg.max_capacity * pct) / 100;
+        const vf = clamp(pct, 0, 100) / 100;
+        heightFrac = (isHorizontal && cfg.level_is_volume)
+          ? volumeFractionToHeightFraction(vf) : vf;
       }
     }
 
     const pctClamped = clamp(pct, 0, 100);
-    const volFrac = pctClamped / 100;
-    const isHorizontal = cfg.orientation === "horizontal";
-    const heightFrac = available
-      ? (isHorizontal && cfg.level_is_volume ? volumeFractionToHeightFraction(volFrac) : volFrac)
-      : 0;
 
     const fillColor = available ? cfg.fill_color : "#9aa0a6";
     const low = available && pctClamped <= cfg.low_threshold;
@@ -489,6 +542,7 @@ class PropaneTankCardEditor extends HTMLElement {
           { name: "value_type", selector: { select: { mode: "dropdown", options: [
             { value: "percentage", label: "Sensor reports %" },
             { value: "gallons", label: "Sensor reports gallons" },
+            { value: "inches", label: "Sensor reports inches (depth)" },
           ] } } },
         ],
       },
@@ -500,6 +554,7 @@ class PropaneTankCardEditor extends HTMLElement {
           { name: "aspect_ratio", selector: { number: { min: 1.2, max: 6, step: 0.1, mode: "box" } } },
         ],
       },
+      { name: "full_scale_inches", selector: { number: { min: 0, max: 200, step: 0.1, mode: "box", unit_of_measurement: "in" } } },
       {
         type: "grid",
         name: "",
@@ -530,6 +585,7 @@ class PropaneTankCardEditor extends HTMLElement {
       value_type: "Sensor value type",
       max_capacity: "Tank capacity (for gallons readout)",
       aspect_ratio: "Aspect ratio override",
+      full_scale_inches: "Depth at 100% full — inches (horizontal: inside diameter)",
       show_percentage: "Show percentage overlay",
       show_gallons: "Show gallons remaining",
       low_threshold: "Low-level warning threshold",
