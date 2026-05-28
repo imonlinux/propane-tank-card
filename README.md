@@ -8,14 +8,12 @@ A custom [Home Assistant](https://www.home-assistant.io/) Lovelace card that tur
 - Optional **gallons remaining** readout and a **low-level warning** color.
 - Full **visual (GUI) editor** — no YAML required.
 
-> Replace `YOUR_GITHUB_USERNAME` below with your GitHub username before publishing.
-
 ## Installation
 
 ### Via HACS (recommended)
 
 1. In HACS, open the three-dot menu → **Custom repositories**.
-2. Add `https://github.com/YOUR_GITHUB_USERNAME/propane-tank-card` with category **Dashboard**.
+2. Add `https://github.com/imonlinux/propane-tank-card` with category **Dashboard**.
 3. Find **Propane Tank Card** in HACS and click **Download**.
 4. HACS adds the dashboard resource automatically. (If you run YAML-mode dashboards, add the resource manually — see below.)
 5. Hard-refresh your browser (Ctrl/Cmd+Shift+R).
