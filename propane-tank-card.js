@@ -568,8 +568,8 @@ class PropaneTankCardEditor extends HTMLElement {
         type: "grid",
         name: "",
         schema: [
-          { name: "fill_color", selector: { text: {} } },
-          { name: "tank_color", selector: { text: {} } },
+          { name: "fill_color", selector: { color: {} } },
+          { name: "tank_color", selector: { color: {} } },
         ],
       },
       { name: "level_is_volume", selector: { boolean: {} } },
@@ -589,8 +589,8 @@ class PropaneTankCardEditor extends HTMLElement {
       show_percentage: "Show percentage overlay",
       show_gallons: "Show gallons remaining",
       low_threshold: "Low-level warning threshold",
-      fill_color: "Liquid color (hex)",
-      tank_color: "Tank color (hex)",
+      fill_color: "Liquid color",
+      tank_color: "Tank color",
       level_is_volume: "Treat reading as volume % (volume-accurate fill)",
     };
   }

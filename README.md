@@ -99,8 +99,8 @@ show_gallons: true
 | `show_percentage` | bool | `true` | Show the big percentage overlay. |
 | `show_gallons` | bool | `false` | Show "≈ N gal" beneath the percentage. |
 | `low_threshold` | number | `20` | At/below this percent the number turns the warning color. |
-| `fill_color` | string | `#2f9bdb` | Liquid color (hex). |
-| `tank_color` | string | `#e7e9ec` | Tank body color (hex). |
+| `fill_color` | string | `#2f9bdb` | Liquid color — use the visual editor's color picker, or hex in YAML. |
+| `tank_color` | string | `#e7e9ec` | Tank body color — use the visual editor's color picker, or hex in YAML. |
 | `warning_color` | string | `#e8623d` | Color used for the low-level percentage. |
 
 ### Built-in presets
