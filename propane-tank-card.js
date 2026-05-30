@@ -72,6 +72,27 @@ function shade(hex, pct) {
   return "#" + toHex(r) + toHex(g) + toHex(b);
 }
 
+// HA's color_rgb selector wants/returns [r, g, b]; the card stores hex.
+// These two helpers bridge the gap and tolerate either form on input.
+function hexToRgb(hex) {
+  if (Array.isArray(hex)) return hex;
+  if (typeof hex !== "string") return null;
+  let h = hex.trim().replace("#", "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return [
+    parseInt(h.substr(0, 2), 16),
+    parseInt(h.substr(2, 2), 16),
+    parseInt(h.substr(4, 2), 16),
+  ];
+}
+function rgbToHex(rgb) {
+  if (typeof rgb === "string") return rgb;
+  if (!Array.isArray(rgb) || rgb.length < 3) return null;
+  const toHex = (n) => clamp(Math.round(n), 0, 255).toString(16).padStart(2, "0");
+  return "#" + toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
+}
+
 /**
  * Convert a VOLUME fraction (0..1) to a FILL-HEIGHT fraction (0..1) for a
  * horizontal cylinder. The cross-section is a circle, so the filled area
@@ -568,8 +589,8 @@ class PropaneTankCardEditor extends HTMLElement {
         type: "grid",
         name: "",
         schema: [
-          { name: "fill_color", selector: { color: {} } },
-          { name: "tank_color", selector: { color: {} } },
+          { name: "fill_color", selector: { color_rgb: {} } },
+          { name: "tank_color", selector: { color_rgb: {} } },
         ],
       },
       { name: "level_is_volume", selector: { boolean: {} } },
@@ -601,14 +622,34 @@ class PropaneTankCardEditor extends HTMLElement {
       this._form = document.createElement("ha-form");
       this._form.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
-        const next = { ...this._config, ...ev.detail.value };
+        // ha-form's color_rgb selector emits [r,g,b]; convert back to hex
+        // so the rest of the card (and YAML) keeps seeing "#rrggbb" strings.
+        const incoming = { ...ev.detail.value };
+        if (Array.isArray(incoming.fill_color)) {
+          incoming.fill_color = rgbToHex(incoming.fill_color);
+        }
+        if (Array.isArray(incoming.tank_color)) {
+          incoming.tank_color = rgbToHex(incoming.tank_color);
+        }
+        const next = { ...this._config, ...incoming };
         this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: next } }));
       });
       this.appendChild(this._form);
     }
     const labels = this._labels();
+    // Going into ha-form: hand the color selectors [r,g,b] so the picker
+    // displays the current swatch correctly.
+    const data = { ...DEFAULTS, ...this._config };
+    if (typeof data.fill_color === "string") {
+      const rgb = hexToRgb(data.fill_color);
+      if (rgb) data.fill_color = rgb;
+    }
+    if (typeof data.tank_color === "string") {
+      const rgb = hexToRgb(data.tank_color);
+      if (rgb) data.tank_color = rgb;
+    }
     this._form.hass = this._hass;
-    this._form.data = { ...DEFAULTS, ...this._config };
+    this._form.data = data;
     this._form.schema = this._schema();
     this._form.computeLabel = (s) => labels[s.name] || s.name;
   }
