@@ -9,7 +9,7 @@
  * @license MIT
  */
 
-const PTC_VERSION = "1.0.0";
+const PTC_VERSION = "1.1.0";
 
 /* ------------------------------------------------------------------ *
  *  Tank presets
@@ -44,8 +44,10 @@ const DEFAULTS = {
   tank_color: "#e7e9ec",
   show_percentage: true,
   show_gallons: false,
+  volume_unit: "gal",        // "gal" | "L" — units for the volume readout
   low_threshold: 20,
   warning_color: "#e8623d",
+  tint_when_low: true,       // color the liquid with warning_color below threshold
 };
 
 /* ------------------------------------------------------------------ *
@@ -150,7 +152,7 @@ let PTC_UID = 0;
 
 // Horizontal tank: a capsule (stadium) cross-section with saddle legs,
 // a valve hood on top, weld seams and a flat liquid surface.
-function buildHorizontalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn) {
+function buildHorizontalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn, prevHeightFrac, animDur) {
   const BODY_H = 150;
   const aspect = clamp(aspectIn || 3, 1.2, 6);
   const BODY_W = BODY_H * aspect;
@@ -171,6 +173,15 @@ function buildHorizontalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn)
   const surfaceY = y0 + BODY_H * (1 - heightFrac);
   const fluidH = BODY_H * heightFrac;
 
+  // Eased liquid motion (Material standard ease). Skipped on first paint and
+  // when prefers-reduced-motion is honored upstream (animDur === 0).
+  const doAnim = prevHeightFrac != null && animDur > 0 && Math.abs(prevHeightFrac - heightFrac) > 0.0005;
+  const prevSurfaceY = y0 + BODY_H * (1 - prevHeightFrac);
+  const prevFluidH = BODY_H * prevHeightFrac;
+  const anim = (attr, from, to) => doAnim
+    ? `<animate attributeName="${attr}" from="${from}" to="${to}" dur="${animDur}s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0.4 0 0.2 1"/>`
+    : "";
+
   const mLight = shade(tankColor, 26), mMid = tankColor, mDark = shade(tankColor, -16), mEdge = shade(tankColor, -34);
   const fTop = shade(fillColor, 20), fBot = shade(fillColor, -24), fSurf = shade(fillColor, 38);
 
@@ -181,7 +192,7 @@ function buildHorizontalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn)
     `<path d="M ${lx - legW / 2} ${legY} L ${lx + legW / 2} ${legY} L ${lx + legW / 2 + 8} ${legY + legH} L ${lx - legW / 2 - 8} ${legY + legH} Z" fill="${mEdge}"/>`;
 
   return `
-<svg viewBox="0 0 ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" class="ptc-svg" preserveAspectRatio="xMidYMid meet" role="img">
+<svg viewBox="0 0 ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" class="ptc-svg" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
   <defs>
     <linearGradient id="ptc-metal-${uid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${mLight}"/>
@@ -204,12 +215,12 @@ function buildHorizontalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn)
 
   <!-- liquid -->
   <g clip-path="url(#ptc-clip-${uid})">
-    <rect x="${x0}" y="${surfaceY}" width="${BODY_W}" height="${fluidH}" fill="url(#ptc-fluid-${uid})"/>
+    <rect x="${x0}" y="${surfaceY}" width="${BODY_W}" height="${fluidH}" fill="url(#ptc-fluid-${uid})">
+      ${anim("y", prevSurfaceY, surfaceY)}${anim("height", prevFluidH, fluidH)}
+    </rect>
     ${heightFrac > 0.003 && heightFrac < 0.997
-      ? `<rect x="${x0}" y="${surfaceY - 1}" width="${BODY_W}" height="3.5" fill="${fSurf}" opacity="0.9"/>`
+      ? `<rect x="${x0}" y="${surfaceY - 1}" width="${BODY_W}" height="3.5" fill="${fSurf}" opacity="0.9">${anim("y", prevSurfaceY - 1, surfaceY - 1)}</rect>`
       : ""}
-    <!-- inner top shading so the empty space reads as inside the tank -->
-    <rect x="${x0}" y="${y0}" width="${BODY_W}" height="${BODY_H}" fill="url(#ptc-metal-${uid})" opacity="0.0"/>
   </g>
 
   <!-- weld seams where the end caps meet the cylinder -->
@@ -217,7 +228,6 @@ function buildHorizontalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn)
   <line x1="${x0 + BODY_W - r}" y1="${y0 + 2}" x2="${x0 + BODY_W - r}" y2="${y0 + 2 * r - 2}" stroke="${mEdge}" stroke-width="1.2" opacity="0.45"/>
 
   <!-- specular highlight -->
-  <path d="${capsule}" fill="none"/>
   <rect x="${x0 + r * 0.4}" y="${y0 + 10}" width="${BODY_W - r * 0.8}" height="14" rx="7" fill="#ffffff" opacity="0.12" clip-path="url(#ptc-clip-${uid})"/>
 
   <!-- rim -->
@@ -233,7 +243,7 @@ function buildHorizontalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn)
 // Vertical tank: a domed-top cylinder with a protective collar/valve and
 // a foot ring. Liquid level is treated linearly (height == volume), which
 // is the standard approximation for vertical cylinders.
-function buildVerticalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn) {
+function buildVerticalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn, prevHeightFrac, animDur) {
   const BODY_W = 150;
   const aspect = clamp(aspectIn || 2, 1.2, 5);
   const BODY_H = BODY_W * aspect;
@@ -263,11 +273,17 @@ function buildVerticalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn) {
   const VB_W = BODY_W + padX * 2;
   const VB_H = BODY_H + padTop + padBot;
 
+  const doAnim = prevHeightFrac != null && animDur > 0 && Math.abs(prevHeightFrac - heightFrac) > 0.0005;
+  const prevSurfaceY = botApex - prevHeightFrac * span;
+  const anim = (attr, from, to) => doAnim
+    ? `<animate attributeName="${attr}" from="${from}" to="${to}" dur="${animDur}s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0.4 0 0.2 1"/>`
+    : "";
+
   const mLight = shade(tankColor, 26), mMid = tankColor, mDark = shade(tankColor, -16), mEdge = shade(tankColor, -34);
   const fTop = shade(fillColor, 20), fBot = shade(fillColor, -24), fSurf = shade(fillColor, 38);
 
   return `
-<svg viewBox="0 0 ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" class="ptc-svg" preserveAspectRatio="xMidYMid meet" role="img">
+<svg viewBox="0 0 ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" class="ptc-svg" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
   <defs>
     <linearGradient id="ptc-vmetal-${uid}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="${mDark}"/>
@@ -292,9 +308,11 @@ function buildVerticalTankSvg(heightFrac, fillColor, tankColor, uid, aspectIn) {
 
   <!-- liquid -->
   <g clip-path="url(#ptc-vclip-${uid})">
-    <rect x="${x0}" y="${surfaceY}" width="${W}" height="${botApex - surfaceY}" fill="url(#ptc-vfluid-${uid})"/>
+    <rect x="${x0}" y="${surfaceY}" width="${W}" height="${botApex - surfaceY}" fill="url(#ptc-vfluid-${uid})">
+      ${anim("y", prevSurfaceY, surfaceY)}${anim("height", botApex - prevSurfaceY, botApex - surfaceY)}
+    </rect>
     ${heightFrac > 0.003 && heightFrac < 0.997
-      ? `<rect x="${x0}" y="${surfaceY - 1}" width="${W}" height="3.5" fill="${fSurf}" opacity="0.9"/>`
+      ? `<rect x="${x0}" y="${surfaceY - 1}" width="${W}" height="3.5" fill="${fSurf}" opacity="0.9">${anim("y", prevSurfaceY - 1, surfaceY - 1)}</rect>`
       : ""}
   </g>
 
@@ -323,6 +341,7 @@ class PropaneTankCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._uid = ++PTC_UID;
     this._lastSig = null;
+    this._prevHeightFrac = null;
   }
 
   static getConfigElement() {
@@ -366,6 +385,15 @@ class PropaneTankCard extends HTMLElement {
 
   getCardSize() {
     return this._config && this._config.orientation === "vertical" ? 6 : 4;
+  }
+
+  // Sizing for the Sections (grid) dashboard. Vertical tanks want a tall,
+  // narrow cell; horizontal tanks a wide, short one. Users can still resize.
+  getGridOptions() {
+    const vertical = this._config && this._config.orientation === "vertical";
+    return vertical
+      ? { rows: 6, columns: 6, min_rows: 4, min_columns: 4 }
+      : { rows: 4, columns: 12, min_rows: 3, min_columns: 6 };
   }
 
   _fireMoreInfo() {
@@ -423,24 +451,41 @@ class PropaneTankCard extends HTMLElement {
 
     const pctClamped = clamp(pct, 0, 100);
 
-    const fillColor = available ? cfg.fill_color : "#9aa0a6";
     const low = available && pctClamped <= cfg.low_threshold;
+    // Liquid is grey when unavailable; tinted to the warning color when low
+    // (if enabled), otherwise the configured fill color.
+    const fillColor = !available
+      ? "#9aa0a6"
+      : (low && cfg.tint_when_low !== false ? cfg.warning_color : cfg.fill_color);
 
     // Skip redraw if nothing meaningful changed (perf in busy dashboards).
-    const sig = [available, Math.round(pct * 10), cfg.orientation, cfg.aspect_ratio, cfg.fill_color, cfg.tank_color, low, cfg.name].join("|");
+    const sig = [
+      available, Math.round(pct * 10), cfg.orientation, cfg.aspect_ratio,
+      fillColor, cfg.tank_color, cfg.warning_color, low,
+      cfg.volume_unit, cfg.show_gallons, cfg.show_percentage, cfg.name,
+    ].join("|");
     if (sig === this._lastSig) return;
     this._lastSig = sig;
 
+    // Respect the user's reduced-motion preference; first paint never animates.
+    const reduce = typeof window !== "undefined" && window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const animDur = reduce ? 0 : 0.6;
+
     const name = cfg.name || (st && st.attributes && st.attributes.friendly_name) || cfg.entity;
     const svg = isHorizontal
-      ? buildHorizontalTankSvg(heightFrac, fillColor, cfg.tank_color, this._uid, cfg.aspect_ratio)
-      : buildVerticalTankSvg(heightFrac, fillColor, cfg.tank_color, this._uid, cfg.aspect_ratio);
+      ? buildHorizontalTankSvg(heightFrac, fillColor, cfg.tank_color, this._uid, cfg.aspect_ratio, this._prevHeightFrac, animDur)
+      : buildVerticalTankSvg(heightFrac, fillColor, cfg.tank_color, this._uid, cfg.aspect_ratio, this._prevHeightFrac, animDur);
+    this._prevHeightFrac = heightFrac;
 
     const pctText = available ? `${Math.round(pct)}%` : "—";
-    const galText =
-      cfg.show_gallons && available
-        ? `≈ ${cfg.max_capacity < 30 ? gallons.toFixed(1) : Math.round(gallons)} gal`
-        : "";
+    let galText = "";
+    if (cfg.show_gallons && available) {
+      const liters = cfg.volume_unit === "L";
+      const val = liters ? gallons * 3.785411784 : gallons;
+      galText = `≈ ${val < 100 ? val.toFixed(1) : Math.round(val)} ${liters ? "L" : "gal"}`;
+    }
+    const ariaLabel = `${name}: ${available ? Math.round(pct) + " percent" : "sensor unavailable"}`;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -511,7 +556,7 @@ class PropaneTankCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="ptc-name">${name}</div>
-        <div class="ptc-tankwrap">
+        <div class="ptc-tankwrap" role="img" aria-label="${ariaLabel}">
           ${svg}
           <div class="ptc-overlay">
             ${cfg.show_percentage ? `<div class="ptc-pct">${pctText}</div>` : ""}
@@ -584,6 +629,17 @@ class PropaneTankCardEditor extends HTMLElement {
           { name: "show_gallons", selector: { boolean: {} } },
         ],
       },
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "volume_unit", selector: { select: { mode: "dropdown", options: [
+            { value: "gal", label: "Gallons" },
+            { value: "L", label: "Liters" },
+          ] } } },
+          { name: "tint_when_low", selector: { boolean: {} } },
+        ],
+      },
       { name: "low_threshold", selector: { number: { min: 0, max: 100, step: 1, mode: "slider", unit_of_measurement: "%" } } },
       {
         type: "grid",
@@ -591,6 +647,7 @@ class PropaneTankCardEditor extends HTMLElement {
         schema: [
           { name: "fill_color", selector: { color_rgb: {} } },
           { name: "tank_color", selector: { color_rgb: {} } },
+          { name: "warning_color", selector: { color_rgb: {} } },
         ],
       },
       { name: "level_is_volume", selector: { boolean: {} } },
@@ -608,16 +665,20 @@ class PropaneTankCardEditor extends HTMLElement {
       aspect_ratio: "Aspect ratio override",
       full_scale_inches: "Depth at 100% full — inches (horizontal: inside diameter)",
       show_percentage: "Show percentage overlay",
-      show_gallons: "Show gallons remaining",
+      show_gallons: "Show volume remaining",
+      volume_unit: "Volume readout unit",
+      tint_when_low: "Tint liquid when low",
       low_threshold: "Low-level warning threshold",
       fill_color: "Liquid color",
       tank_color: "Tank color",
+      warning_color: "Low-level color",
       level_is_volume: "Treat reading as volume % (volume-accurate fill)",
     };
   }
 
   _render() {
     if (!this._hass) return;
+    const COLOR_KEYS = ["fill_color", "tank_color", "warning_color"];
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.addEventListener("value-changed", (ev) => {
@@ -625,12 +686,9 @@ class PropaneTankCardEditor extends HTMLElement {
         // ha-form's color_rgb selector emits [r,g,b]; convert back to hex
         // so the rest of the card (and YAML) keeps seeing "#rrggbb" strings.
         const incoming = { ...ev.detail.value };
-        if (Array.isArray(incoming.fill_color)) {
-          incoming.fill_color = rgbToHex(incoming.fill_color);
-        }
-        if (Array.isArray(incoming.tank_color)) {
-          incoming.tank_color = rgbToHex(incoming.tank_color);
-        }
+        COLOR_KEYS.forEach((k) => {
+          if (Array.isArray(incoming[k])) incoming[k] = rgbToHex(incoming[k]);
+        });
         const next = { ...this._config, ...incoming };
         this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: next } }));
       });
@@ -640,14 +698,12 @@ class PropaneTankCardEditor extends HTMLElement {
     // Going into ha-form: hand the color selectors [r,g,b] so the picker
     // displays the current swatch correctly.
     const data = { ...DEFAULTS, ...this._config };
-    if (typeof data.fill_color === "string") {
-      const rgb = hexToRgb(data.fill_color);
-      if (rgb) data.fill_color = rgb;
-    }
-    if (typeof data.tank_color === "string") {
-      const rgb = hexToRgb(data.tank_color);
-      if (rgb) data.tank_color = rgb;
-    }
+    COLOR_KEYS.forEach((k) => {
+      if (typeof data[k] === "string") {
+        const rgb = hexToRgb(data[k]);
+        if (rgb) data[k] = rgb;
+      }
+    });
     this._form.hass = this._hass;
     this._form.data = data;
     this._form.schema = this._schema();
@@ -671,7 +727,7 @@ window.customCards.push({
   name: "Propane Tank Card",
   description: "Realistic, volume-accurate propane tank level visualization.",
   preview: true,
-  documentationURL: "https://github.com/YOUR_GITHUB_USERNAME/propane-tank-card",
+  documentationURL: "https://github.com/imonlinux/propane-tank-card",
 });
 
 console.info(
