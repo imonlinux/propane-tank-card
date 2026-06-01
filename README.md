@@ -7,11 +7,10 @@ A custom [Home Assistant](https://www.home-assistant.io/) Lovelace card that tur
 - Selectable **size and orientation** (250 gal horizontal, 5/20 lb vertical, 500/1000 gal, and more) plus a Custom option.
 - Optional **gallons remaining** readout and a **low-level warning** color.
 - Full **visual (GUI) editor** — no YAML required.
+  
+<img width="491" height="266" alt="image" src="https://github.com/user-attachments/assets/cdaad639-9b50-45e5-9084-b6dd383098ce" />
 
-<img width="490" height="264" alt="image" src="https://github.com/user-attachments/assets/8b0bbceb-9c89-45a9-a858-2e2ee68e3e3f" />
-
-<img width="1024" height="1076" alt="image" src="https://github.com/user-attachments/assets/3d650961-d49c-42bc-a6df-7a8cf207ef5e" />
-
+<img width="1026" height="1075" alt="image" src="https://github.com/user-attachments/assets/825faaca-3f25-4e64-bbad-33b9878d54e1" />
 
 ## Installation
 
@@ -99,8 +98,8 @@ show_gallons: true
 | `show_percentage` | bool | `true` | Show the big percentage overlay. |
 | `show_gallons` | bool | `false` | Show "≈ N gal" beneath the percentage. |
 | `low_threshold` | number | `20` | At/below this percent the number turns the warning color. |
-| `fill_color` | string | `#2f9bdb` | Liquid color (hex). |
-| `tank_color` | string | `#e7e9ec` | Tank body color (hex). |
+| `fill_color` | string | `#2f9bdb` | Liquid color — use the visual editor's color picker, or hex in YAML. |
+| `tank_color` | string | `#e7e9ec` | Tank body color — use the visual editor's color picker, or hex in YAML. |
 | `warning_color` | string | `#e8623d` | Color used for the low-level percentage. |
 
 ### Built-in presets
