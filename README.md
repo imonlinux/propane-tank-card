@@ -1,16 +1,18 @@
 # Propane Tank Card
 
-A custom [Home Assistant](https://www.home-assistant.io/) Lovelace card that turns a propane level sensor into a **realistic cross-section of the tank** with a **volume-accurate liquid level** and a percentage overlay.
+A custom [Home Assistant](https://www.home-assistant.io/) Lovelace card that turns a propane level sensor into a **realistic cross-section of the tank**, with a **volume-accurate liquid level**, a percentage overlay, and an optional volume-remaining readout.
 
-- Realistic tank artwork drawn as scalable SVG — horizontal ASME tanks (with saddle legs, valve hood, weld seams) and vertical cylinders (domed top, protective collar, foot ring).
-- **Volume-accurate fill.** For horizontal tanks the liquid line is placed using the circular-segment formula, so a tank reading 25% shows the liquid sitting at ~30% of the height (the middle of a horizontal cylinder holds the most), not naively at the quarter line. 50% is exactly halfway, as it should be.
-- Selectable **size and orientation** (250 gal horizontal, 5/20 lb vertical, 500/1000 gal, and more) plus a Custom option.
-- Optional **gallons remaining** readout and a **low-level warning** color.
+- Realistic SVG artwork — horizontal ASME tanks (saddle legs, valve hood, weld seams) and vertical cylinders (domed top, protective collar, foot ring), with a smooth, eased liquid animation when the level changes.
+- **Volume-accurate fill.** For horizontal tanks the liquid line is placed with the circular-segment formula, so a tank reading 25% sits at ~30% of the height (the middle of a cylinder holds the most), and 50% is exactly halfway.
+- **Works with any sensor.** Feed it a percentage, a volume (gallons/liters), or a raw depth reading (inches/mm) — the card detects the unit from the sensor and converts. No helper sensors required.
+- **Metric or imperial** display, following Home Assistant or set explicitly.
+- Selectable **size & orientation** (20 lb up to 1000 gal) plus a Custom option, with capacity and shape derived from the tank you pick.
+- Optional **volume-remaining** readout and a **low-level warning** that tints the number and the liquid.
 - Full **visual (GUI) editor** — no YAML required.
-  
-<img width="491" height="266" alt="image" src="https://github.com/user-attachments/assets/cdaad639-9b50-45e5-9084-b6dd383098ce" />
 
-<img width="1026" height="1075" alt="image" src="https://github.com/user-attachments/assets/825faaca-3f25-4e64-bbad-33b9878d54e1" />
+<img width="386" height="210" alt="image" src="https://github.com/user-attachments/assets/a164d59a-fe14-40c2-bd32-c18456bf6f32" />
+
+<img width="822" height="1058" alt="image" src="https://github.com/user-attachments/assets/cba16cc9-566c-4543-8e42-1629af63f739" />
 
 ## Installation
 
@@ -18,37 +20,82 @@ A custom [Home Assistant](https://www.home-assistant.io/) Lovelace card that tur
 
 [![Open your Home Assistant instance and add this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=imonlinux&repository=propane-tank-card&category=dashboard)
 
-### Or
+Or add it manually as a custom repository:
 
 1. In HACS, open the three-dot menu → **Custom repositories**.
 2. Add `https://github.com/imonlinux/propane-tank-card` with category **Dashboard**.
 3. Find **Propane Tank Card** in HACS and click **Download**.
-4. HACS adds the dashboard resource automatically. (If you run YAML-mode dashboards, add the resource manually — see below.)
+4. HACS registers the dashboard resource automatically. (If you run YAML-mode dashboards, add the resource manually — see below.)
 5. Hard-refresh your browser (Ctrl/Cmd+Shift+R).
 
 ### Manual
 
-1. Copy `dist/propane-tank-card.js` to `/config/www/propane-tank-card.js`.
+1. Copy `propane-tank-card.js` to `/config/www/propane-tank-card.js`.
 2. Add the resource (Settings → Dashboards → ⋮ → Resources → Add):
    - URL: `/local/propane-tank-card.js`
    - Type: **JavaScript Module**
+3. Hard-refresh your browser.
 
-HACS-installed resource URL (for reference): `/hacsfiles/propane-tank-card/propane-tank-card.js`.
+HACS-installed resource URL, for reference: `/hacsfiles/propane-tank-card/propane-tank-card.js`.
 
-## Usage
+## Quick start
 
-Add a card, search for **Propane Tank Card**, and use the visual editor — or use YAML:
+Add a card, search for **Propane Tank Card**, and use the visual editor — or drop in this minimum config:
+
+```yaml
+type: custom:propane-tank-card
+entity: sensor.propane_tank_level
+tank_preset: 250gal_horizontal
+```
+
+That's it. The card reads your sensor's unit to decide whether it's a percentage, a volume, or a depth, and pulls the tank's capacity and shape from the preset.
+
+## Examples
+
+A standard percentage gauge, with the gallons remaining shown:
 
 ```yaml
 type: custom:propane-tank-card
 entity: sensor.propane_tank_level
 name: Main Tank
 tank_preset: 250gal_horizontal
-show_percentage: true
 show_gallons: true
 ```
 
-A small portable tank:
+A raw **depth** sensor (Mopeka, magnetostrictive, ultrasonic) reporting inches or millimeters above the probe — no compensation sensors needed. The card derives gallons and percentage from the tank geometry:
+
+```yaml
+type: custom:propane-tank-card
+entity: sensor.propane_tank_tank_level
+name: Propane
+tank_preset: 250gal_horizontal
+value_type: depth         # usually auto-detected from the sensor's unit
+full_scale_inches: 30     # depth at 100% = inside diameter (defaults from preset)
+show_gallons: true
+```
+
+A sensor that reports a **volume** instead of a percentage:
+
+```yaml
+type: custom:propane-tank-card
+entity: sensor.tank_gallons
+tank_preset: 500gal_horizontal
+value_type: volume
+max_capacity: 500
+show_gallons: true
+```
+
+**Metric** display (litres), e.g. for a Canadian install on the same physical tank:
+
+```yaml
+type: custom:propane-tank-card
+entity: sensor.propane_tank_level
+tank_preset: 250gal_horizontal
+units: metric
+show_gallons: true
+```
+
+A small portable cylinder with a custom liquid color:
 
 ```yaml
 type: custom:propane-tank-card
@@ -59,48 +106,30 @@ fill_color: "#e2902f"
 low_threshold: 25
 ```
 
-A sensor that reports gallons instead of percent:
-
-```yaml
-type: custom:propane-tank-card
-entity: sensor.tank_gallons
-tank_preset: 500gal_horizontal
-value_type: gallons
-max_capacity: 500
-show_gallons: true
-```
-
-A raw depth sensor that reports **inches of liquid** above the probe (Mopeka, magnetostrictive, ultrasonic, etc.) — **no compensation sensors needed**. The card derives gallons and percentage from the tank geometry using a cylinder + hemispherical-heads model:
-
-```yaml
-type: custom:propane-tank-card
-entity: sensor.propane_tank_tank_level
-tank_preset: 250gal_horizontal
-value_type: inches
-full_scale_inches: 30   # depth reading at 100% full = inside diameter
-max_capacity: 250
-show_gallons: true
-```
-
 ## Options
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `entity` | string | **required** | Your propane level sensor (`sensor`, `number`, or `input_number`). |
 | `name` | string | sensor name | Title shown on the card. |
-| `tank_preset` | string | `250gal_horizontal` | Sets orientation, aspect ratio, and capacity. See list below. |
+| `units` | string | `auto` | Display units for the volume readout: `auto` (follow Home Assistant), `imperial` (gallons), or `metric` (liters). |
+| `tank_preset` | string | `250gal_horizontal` | Sets orientation, aspect ratio, capacity, and full-scale depth. See list below. |
+| `value_type` | string | `auto` | What the sensor reports: `auto`, `percentage` (0–100), `volume`, or `depth` (liquid height). `auto` infers it from the sensor's unit. |
+| `sensor_unit` | string | `auto` | The unit the sensor's value is in. `auto` reads the sensor's `unit_of_measurement`. Override with `in`, `ft`, `mm`, `cm`, `m`, `gal`, `L`, `mL`, `m3`, `ft3`, or `%`. |
+| `full_scale_inches` | number | from preset | Depth reading at 100% full (used when `value_type` resolves to `depth`). For a horizontal tank this is the inside diameter; for a vertical tank, the inside height. |
+| `max_capacity` | number | from preset | Tank capacity in gallons. Derived from the preset; override only for the `custom` preset or to show usable rather than nominal capacity. |
 | `orientation` | string | from preset | `horizontal` or `vertical` — overrides the preset. |
 | `aspect_ratio` | number | from preset | Length/diameter (horizontal) or height/diameter (vertical). Overrides the preset. |
-| `value_type` | string | `percentage` | `percentage` (0–100), `gallons` (volume), or `inches` (raw liquid depth above the sensor). |
-| `full_scale_inches` | number | from preset | Used when `value_type: inches`. Depth reading at 100% full. For a horizontal tank this is the inside diameter; for a vertical tank, the inside height. |
-| `max_capacity` | number | from preset | Tank capacity in gallons, used for the gallons readout (and to convert when `value_type` is `gallons` or `inches`). |
-| `level_is_volume` | bool | `true` | Treat the reading as a **volume** percentage and place the liquid line accurately. Set `false` if your sensor already reports liquid **height**. |
-| `show_percentage` | bool | `true` | Show the big percentage overlay. |
-| `show_gallons` | bool | `false` | Show "≈ N gal" beneath the percentage. |
-| `low_threshold` | number | `20` | At/below this percent the number turns the warning color. |
-| `fill_color` | string | `#2f9bdb` | Liquid color — use the visual editor's color picker, or hex in YAML. |
-| `tank_color` | string | `#e7e9ec` | Tank body color — use the visual editor's color picker, or hex in YAML. |
-| `warning_color` | string | `#e8623d` | Color used for the low-level percentage. |
+| `level_is_volume` | bool | `true` | Treat a percentage/volume reading as **volume** and place the liquid line accurately. Set `false` if your sensor already reports liquid **height** as a percentage. |
+| `show_percentage` | bool | `true` | Show the large percentage overlay. |
+| `show_gallons` | bool | `false` | Show the volume remaining beneath the percentage. |
+| `tint_when_low` | bool | `true` | Tint the liquid (not just the number) with the warning color below the threshold. |
+| `low_threshold` | number | `20` | At/below this percent, the number and (optionally) the liquid turn the warning color. |
+| `fill_color` | string | `#2f9bdb` | Liquid color — use the editor's color picker, or hex in YAML. |
+| `tank_color` | string | `#e7e9ec` | Tank body color — use the editor's color picker, or hex in YAML. |
+| `warning_color` | string | `#e8623d` | Color used for the low-level state. |
+
+> **Units in three parts.** `value_type` is *what* the number means, `sensor_unit` is *what unit it's in*, and `units` is *how the volume is displayed*. The first two describe your sensor (and are usually auto-detected); the last is your display preference. See [docs/UNITS.md](docs/UNITS.md) for the full model.
 
 ### Built-in presets
 
@@ -109,9 +138,11 @@ show_gallons: true
 `120gal_horizontal`, `250gal_horizontal`, `330gal_horizontal`,
 `500gal_horizontal`, `1000gal_horizontal`, `custom`.
 
-## A note on accuracy
+The presets use North American tank sizes. They work anywhere — Canada uses identical tanks sold by the litre, so set `units: metric` and you're done. Elsewhere (UK/EU/AU, where LPG is sold by mass and tank shapes differ), use the `custom` preset with your own `aspect_ratio`, `max_capacity`, and `full_scale_inches`.
 
-Standard propane gauges report **percentage of capacity (volume)**. For a horizontal cylinder the relationship between liquid height and volume is non-linear, so this card converts volume → height for the visual:
+## How the fill is calculated
+
+Standard propane gauges report **percentage of capacity (volume)**. For a horizontal cylinder the relationship between liquid height and volume is non-linear, so the card converts volume → height for the drawing:
 
 | Volume | Liquid line height |
 | --- | --- |
@@ -121,13 +152,13 @@ Standard propane gauges report **percentage of capacity (volume)**. For a horizo
 | 75% | ~70.2% |
 | 90% | ~84.4% |
 
-When you use **`value_type: inches`** the card has the actual liquid height, so it draws the liquid line exactly and computes gallons/percentage from the geometry. For horizontal tanks it uses a cylinder + two hemispherical heads model, deriving the cylindrical length from the inside diameter and total capacity — which self-calibrates to your specific tank. Vertical tanks are treated linearly.
+When the input is a **depth** reading the card already has the true liquid height, so it draws the line exactly and computes gallons/percentage from the geometry. Horizontal tanks use a cylinder + two-hemispherical-heads model, deriving the cylindrical length from the inside diameter and total capacity — which self-calibrates to your tank. Vertical tanks are treated linearly.
 
-If your sensor already reports liquid height as a percentage (not volume), set `level_is_volume: false`.
+If your sensor reports liquid **height** as a percentage rather than volume, set `level_is_volume: false`.
 
-## A note on linear compensation sensors
+### Standalone gallons / percentage (optional)
 
-If you prefer to keep standalone gallons/percentage entities (for the Energy dashboard, automations, etc.), use a multi-point table with a low-degree fit. The values below come from a cylinder + hemispherical-heads model of a 30″ × 92″, 250-gallon tank:
+If you'd rather keep separate gallons and percentage entities, use the `compensation` integration with a multi-point table. A two-point table is linear and overstates the lower half of a tank — these points come from the cylinder + hemispherical-heads model of a 30″ × 92″, 250-gallon tank:
 
 ```yaml
 sensor:
@@ -135,7 +166,7 @@ sensor:
     propane_tank_gallons:
       source: sensor.propane_tank_tank_level
       unit_of_measurement: gal
-      precision: 0
+      precision: 1
       degree: 3
       data_points:
         - [0, 0.0]
@@ -168,11 +199,17 @@ sensor:
         - [30, 100.0]
 ```
 
-For a tank with different dimensions, regenerate the points using the same model (R = diameter/2; cylinder length L derived from total capacity; volume(h) = L·segmentArea(h) + sphericalCapVolume(h)). Or skip the compensation sensors entirely and feed the raw inches sensor to this card with `value_type: inches`.
+For a tank with different dimensions, regenerate the points with the same model (R = diameter/2; cylinder length L derived from capacity; volume(h) = L·segmentArea(h) + sphericalCapVolume(h)). Or skip these entirely and feed the raw depth sensor straight to the card.
 
-## Report Issues
+## Troubleshooting
 
-Use this link to report issues with this card: [Issues](https://github.com/imonlinux/propane-tank-card/issues/)
+- **Liquid line looks wrong with a depth sensor.** Check `full_scale_inches` matches the inside diameter (horizontal) or inside height (vertical) at a full tank.
+- **Console warning about an assumed unit.** The card couldn't read the sensor's `unit_of_measurement` and fell back to inches/gallons. Set `sensor_unit` to the correct unit to silence it.
+- **Editor doesn't reflect a change.** Hard-refresh the browser so the updated resource loads.
+
+## Report issues
+
+[Open an issue](https://github.com/imonlinux/propane-tank-card/issues/) with your card YAML and the sensor's state and unit.
 
 ## License
 
