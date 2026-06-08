@@ -9,7 +9,7 @@
  * @license MIT
  */
 
-const PTC_VERSION = "1.2.0";
+const PTC_VERSION = "1.3.0";
 
 /* ------------------------------------------------------------------ *
  *  Tank presets
@@ -811,12 +811,55 @@ if (!customElements.get("propane-tank-card-editor")) {
 }
 
 window.customCards = window.customCards || [];
+
+/**
+ * Card-picker suggestion (Home Assistant 2026.6+). Offers this card under the
+ * picker's "Community" section when the selected entity looks like a propane
+ * tank level. Deliberately conservative — returns null for anything that isn't
+ * a clear fit, so the picker stays uncluttered. Ignored by older HA versions.
+ */
+function ptcEntitySuggestion(hass, entityId) {
+  if (!hass || !entityId) return null;
+  const domain = String(entityId).split(".")[0];
+  if (["sensor", "number", "input_number"].indexOf(domain) === -1) return null;
+  const st = hass.states && hass.states[entityId];
+  if (!st) return null;
+  const a = st.attributes || {};
+
+  // Skip measurements that may share a tank's name but aren't a level
+  // (e.g. a Mopeka sensor's battery / temperature / signal entities).
+  const EXCLUDE_DC = [
+    "battery", "temperature", "signal_strength", "timestamp", "voltage",
+    "current", "power", "energy", "humidity", "pressure", "frequency",
+    "data_rate", "duration", "enum",
+  ];
+  const dc = a.device_class;
+  if (dc && EXCLUDE_DC.indexOf(dc) !== -1) return null;
+
+  // Must read like a level: a manual number helper, a depth/distance, or a
+  // %/volume/length unit. (A unitless plain sensor — e.g. a "tank status"
+  // text sensor — is not a level and is skipped.)
+  const manualNumber = domain === "number" || domain === "input_number";
+  const levelLike = manualNumber || dc === "distance" || normalizeUnit(a.unit_of_measurement) !== null;
+  if (!levelLike) return null;
+
+  // Topical filter so we don't appear for every % or distance sensor.
+  const reg = hass.entities && hass.entities[entityId];
+  const platform = reg && reg.platform;
+  const hay = (entityId + " " + (a.friendly_name || "")).toLowerCase();
+  const topical = platform === "mopeka" || /propane|lpg|\btank\b/.test(hay);
+  if (!topical) return null;
+
+  return { config: { type: "custom:propane-tank-card", entity: entityId } };
+}
+
 window.customCards.push({
   type: "propane-tank-card",
   name: "Propane Tank Card",
   description: "Realistic, volume-accurate propane tank level visualization.",
   preview: true,
   documentationURL: "https://github.com/imonlinux/propane-tank-card",
+  getEntitySuggestion: ptcEntitySuggestion,
 });
 
 console.info(
